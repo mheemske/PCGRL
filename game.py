@@ -3,7 +3,7 @@ import numpy as np
 import math
 import random
 import itertools
-import tensorflow as tf
+#import tensorflow as tf
 
 # Colors
 BLACK = (0, 0, 0)
@@ -18,7 +18,7 @@ SQUARE_HEIGHT = 20
 # Margin between each square
 SQUARE_MARGIN = 0
  
- 
+
 class Square(pygame.sprite.Sprite):
     def __init__(self, x, y, color):
         super().__init__()
@@ -51,11 +51,16 @@ class Player():
         self.x = x
         self.y = y
 
-        self.vx = 0
-        self.vy = 0
+        self.vx = 0.
+        self.vy = 0.
 
-        self.vxmax = 1
-        self.vymax = 1
+        self.vxmax = .3
+        self.vymax = 1.
+
+        self.jump_speed = -1.
+
+        self.ground_acceleration = .1
+        self.air_acceleration = .05
 
         self.grounded = False
 
@@ -83,11 +88,17 @@ class Game():
             "hazard": 4
         }
 
+        self.input_dict = {
+            "left": 0,
+            "right": 1,
+            "up": 2,
+            "down": 3
+        }
+
         self.world = np.zeros((width, height))
         self.world[:, -3:] = self.value_dict["ground"]
         self.world[13:18, -4] = self.value_dict["ground"]
-        self.world[4:9, -4] = self.value_dict["ground"] # Does not work yet
-        #self.world[18, -5] = self.value_dict["ground"]
+        self.world[4:9, -4] = self.value_dict["ground"]
         self.world[2, -4] = self.value_dict["ground"]
         self.world[19, -4] = self.value_dict["ground"]
         self.world[1, -5] = self.value_dict["ground"]
@@ -102,7 +113,7 @@ class Game():
         self.sprite_group.empty()
 
         self.player = Player(width // 2 + 9, height // 2, WHITE)
-        self.player.vy = -1
+        self.player.vy = -1.
         self.player.vx = -0.24
 
         self.collision_snap_distance = 0.0001
@@ -139,24 +150,10 @@ class Game():
 
         self.clock.tick(30)
 
-    def tick(self):
-        self.world = np.zeros((self.width, self.height))
-        self.world[:, -3:] = self.value_dict["ground"]
-        self.world[13:18, -4] = self.value_dict["ground"]
-        self.world[13:18, -5] = self.value_dict["ground"]
-        self.world[4:9, -4] = self.value_dict["ground"] # Does not work yet
-        #self.world[18, -5] = self.value_dict["ground"]
+    def tick(self, ipt):
+        self.move_player(ipt)
 
-        self.world[2, -4] = self.value_dict["ground"]
-        self.world[19, -4] = self.value_dict["ground"]
-        self.world[19, -5] = self.value_dict["ground"]
-
-        #self.world[19, -5] = self.value_dict["ground"]
-        self.world[1, -5] = self.value_dict["ground"]
-
-        self.move_player()
-
-    def move_player(self):
+    def move_player(self, ipt):
         """
         Update the player's velocity and move the player along the vector defined by its velocity (vx, vy). If 
         any block is encountered along the way, alter the trajectory accordingly.
@@ -165,8 +162,20 @@ class Game():
         # Change velocity depending on whether the player is on the ground or in the air
         if not self.player.grounded:
             self.player.vy += self.g
+            if ipt == self.input_dict["left"]:
+                self.player.vx -= self.player.air_acceleration
+            if ipt == self.input_dict["right"]:
+                self.player.vx += self.player.air_acceleration
         else:
-            if self.player.vx != 0:
+            # TODO: Want to be able to press up and left/right and the same time
+            if ipt == self.input_dict["up"]:
+                self.player.vy = self.player.jump_speed
+                self.player.grounded = False
+            elif ipt == self.input_dict["left"]:
+                self.player.vx -= self.player.ground_acceleration
+            elif ipt == self.input_dict["right"]:
+                self.player.vx += self.player.ground_acceleration
+            elif self.player.vx != 0:
                 self.player.vx -= self.player.vx * 0.1
 
         # Clip the velocity
@@ -359,12 +368,6 @@ class Game():
         self.player.y = newy
 
 
-
-# The idea is: 
-# Repeat until the whole frame is done:
-#   Find the first event, either fall or collision
-#   Calculate position + velocity up to first event
-
 if __name__ == "__main__": 
     
     pygame.init()
@@ -372,14 +375,55 @@ if __name__ == "__main__":
     game = Game(21, 21)
 
     done = False
+    key = None
+
+    hold_left = False
+    hold_right = False
+    hold_up = False
+    hold_down = False
 
     while not done:
-        game.show()
-
-        game.tick()
 
         for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:
+
+                if event.key == pygame.K_RIGHT:
+                    hold_right = True
+                if event.key == pygame.K_LEFT:
+                    hold_left = True
+                if event.key == pygame.K_UP:
+                    hold_up = True
+                if event.key == pygame.K_DOWN:
+                    hold_down = True
+
+            if event.type == pygame.KEYUP:
+
+                if event.key == pygame.K_RIGHT:
+                    hold_right = False
+                if event.key == pygame.K_LEFT:
+                    hold_left = False
+                if event.key == pygame.K_UP:
+                    hold_up = False
+                if event.key == pygame.K_DOWN:
+                    hold_down = False
+
             if event.type == pygame.QUIT:
                 done = True
+
+        if hold_left:
+            key = game.input_dict["left"]
+        if hold_right:
+            key = game.input_dict["right"]
+        if hold_up:
+            key = game.input_dict["up"]
+        if hold_down:
+            key = game.input_dict["down"]
+
+
+        game.show()
+
+        game.tick(key)
+
+        key = None
     
     pygame.quit()
