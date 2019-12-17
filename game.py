@@ -54,13 +54,13 @@ class Player():
         self.vx = 0.
         self.vy = 0.
 
-        self.vxmax = .3
-        self.vymax = 1.
+        self.vxmax = .4
+        self.vymax = .9
 
         self.jump_speed = -1.
 
-        self.ground_acceleration = .1
-        self.air_acceleration = .05
+        self.ground_acceleration = .07
+        self.air_acceleration = .04
 
         self.grounded = False
 
@@ -102,6 +102,10 @@ class Game():
         self.world[2, -4] = self.value_dict["ground"]
         self.world[19, -4] = self.value_dict["ground"]
         self.world[1, -5] = self.value_dict["ground"]
+        self.world[-1, :] = self.value_dict["ground"]
+        self.world[0, :] = self.value_dict["ground"]
+        self.world[:, -1] = self.value_dict["ground"]
+        self.world[:, 0] = self.value_dict["ground"]
 
         self.width = width
         self.height = height
@@ -292,7 +296,11 @@ class Game():
                         event_type = 'y'
                 else:
                     tcol = tcolx
-                    if 0 < abs(self.player.vx) < 3 * abs(self.player.vy):
+                    if self.player.x % 1 > 0:
+                        event_type = 'y'
+                    elif self.player.y % 1 > 0:
+                        event_type = 'x'
+                    elif 0 < abs(self.player.vx) < 5 * abs(self.player.vy) or self.player.vy == 0:
                         event_type = 'x'
                     else:
                         event_type = 'y'
@@ -323,6 +331,8 @@ class Game():
 
         t_total = 0.
         while event_type:
+            print(event_t, event_type)
+
             t_total += event_t
 
             if event_type == 'x' or event_type == 'y':
