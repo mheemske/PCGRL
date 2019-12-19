@@ -57,7 +57,10 @@ class Player():
         self.vxmax = .4
         self.vymax = .9
 
-        self.jump_speed = -1.
+        self.jump_speed = -.6
+        self.max_jump_time = 8
+        self.jump_time = self.max_jump_time
+        self.jumping = False
 
         self.ground_acceleration = .07
         self.air_acceleration = .04
@@ -123,6 +126,8 @@ class Game():
         self.collision_snap_distance = 0.0001
 
         self.g = 0.1
+        self.friction_coeff = 0.2
+        self.friction_speed_snap = 0.01
 
     def show(self):
         """
@@ -154,10 +159,10 @@ class Game():
 
         self.clock.tick(30)
 
-    def tick(self, ipt):
-        self.move_player(ipt)
+    def tick(self, action):
+        self.move_player(action)
 
-    def move_player(self, ipt):
+    def move_player(self, action):
         """
         Update the player's velocity and move the player along the vector defined by its velocity (vx, vy). If 
         any block is encountered along the way, alter the trajectory accordingly.
@@ -165,22 +170,36 @@ class Game():
 
         # Change velocity depending on whether the player is on the ground or in the air
         if not self.player.grounded:
-            self.player.vy += self.g
-            if ipt == self.input_dict["left"]:
+            
+            if self.player.jumping:
+                self.player.jump_time -= 1
+                if self.player.jump_time <= 0 or action[1] != self.input_dict["up"]:
+                    self.player.jumping = False
+                    self.player.jump_time = self.player.max_jump_time
+
+                self.player.vy = self.player.jump_speed
+
+            else:
+                self.player.vy += self.g
+
+            if action[0] == self.input_dict["left"]:
                 self.player.vx -= self.player.air_acceleration
-            if ipt == self.input_dict["right"]:
+            if action[0] == self.input_dict["right"]:
                 self.player.vx += self.player.air_acceleration
         else:
-            # TODO: Want to be able to press up and left/right and the same time
-            if ipt == self.input_dict["up"]:
+
+            if action[1] == self.input_dict["up"]:
                 self.player.vy = self.player.jump_speed
                 self.player.grounded = False
-            elif ipt == self.input_dict["left"]:
+                self.player.jumping = True
+            elif action[0] == self.input_dict["left"]:
                 self.player.vx -= self.player.ground_acceleration
-            elif ipt == self.input_dict["right"]:
+            elif action[0] == self.input_dict["right"]:
                 self.player.vx += self.player.ground_acceleration
             elif self.player.vx != 0:
-                self.player.vx -= self.player.vx * 0.1
+                self.player.vx -= self.player.vx * self.friction_coeff
+                if abs(self.player.vx) < self.friction_speed_snap:
+                    self.player.vx = 0
 
         # Clip the velocity
         self.player.vx = min(self.player.vxmax, self.player.vx)
@@ -207,8 +226,9 @@ class Game():
             on_block = (math.floor(self.player.x) + 1, math.floor(self.player.y) + 1)
             new_on_block = (math.floor(newx) + 1, math.floor(self.player.y) + 1)
         else:
-            on_block = (math.floor(self.player.x), math.floor(self.player.y) + 1)
-            if self.world[on_block] == self.value_dict["air"]:
+            on_block_1 = (math.floor(self.player.x), math.floor(self.player.y) + 1)
+            on_block_2 = (math.ceil(self.player.x), math.floor(self.player.y) + 1)
+            if self.world[on_block_1] == self.value_dict["air"] and self.world[on_block_2] == self.value_dict["air"]:
                 return (0, "fall")
             else:
                 return (1, None)
@@ -257,10 +277,10 @@ class Game():
         collisions = [idx for idx, collision in collisions.items() if collision]
 
         if self.player.x == newx:
-            collisions = [idx for idx in collisions if idx[0] == newx]
+            collisions = [idx for idx in collisions if idx[0] == math.floor(newx) or idx[0] == math.ceil(newx)]
 
         if self.player.y == newy:
-            collisions = [idx for idx in collisions if idx[1] == newy]
+            collisions = [idx for idx in collisions if idx[1] == math.floor(newy) or idx[1] == math.ceil(newy)]
 
         tcol = 1
         event_type = None
@@ -300,7 +320,9 @@ class Game():
                         event_type = 'y'
                     elif self.player.y % 1 > 0:
                         event_type = 'x'
-                    elif 0 < abs(self.player.vx) < 5 * abs(self.player.vy) or self.player.vy == 0:
+                    elif 0 < abs(self.player.vx) < 5 * abs(self.player.vy):
+                        event_type = 'x'
+                    elif (self.player.vy == 0) and (self.player.grounded == True):
                         event_type = 'x'
                     else:
                         event_type = 'y'
@@ -331,8 +353,6 @@ class Game():
 
         t_total = 0.
         while event_type:
-            print(event_t, event_type)
-
             t_total += event_t
 
             if event_type == 'x' or event_type == 'y':
@@ -385,7 +405,7 @@ if __name__ == "__main__":
     game = Game(21, 21)
 
     done = False
-    key = None
+    key = [None, None]
 
     hold_left = False
     hold_right = False
@@ -421,19 +441,19 @@ if __name__ == "__main__":
                 done = True
 
         if hold_left:
-            key = game.input_dict["left"]
+            key[0] = game.input_dict["left"]
         if hold_right:
-            key = game.input_dict["right"]
-        if hold_up:
-            key = game.input_dict["up"]
-        if hold_down:
-            key = game.input_dict["down"]
+            key[0] = game.input_dict["right"]
 
+        if hold_up:
+            key[1] = game.input_dict["up"]
+        if hold_down:
+            key[1] = game.input_dict["down"]
 
         game.show()
 
         game.tick(key)
 
-        key = None
+        key = [None, None]
     
     pygame.quit()
